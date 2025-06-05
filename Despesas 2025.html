@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Despesas Mensais Casa 2025</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f0f2f5;
+      margin: 0;
+      padding: 20px;
+      color: #111;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .controls {
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    .btn {
+      background-color: #10b981;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 4px;
+    }
+    .btn:hover {
+      background-color: #059669;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border-radius: 12px;
+      overflow: hidden;
+      background-color: white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 10px;
+      text-align: center;
+      vertical-align: top;
+    }
+    thead th {
+      background-color: #3b82f6;
+      color: white;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    tbody td input[type="number"] {
+      width: 70px;
+      padding: 4px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-bottom: 4px;
+    }
+    tbody td select {
+      padding: 4px;
+      width: 80px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    tfoot td {
+      font-weight: bold;
+      background-color: #f9fafb;
+    }
+    .paid {
+      background-color: #d1fae5 !important;
+    }
+    .unpaid {
+      background-color: #fee2e2 !important;
+    }
+    .remove-btn, .archive-btn, .restore-btn {
+      background-color: #ef4444;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 2px;
+    }
+    .archive-btn {
+      background-color: #6b7280;
+    }
+    .restore-btn {
+      background-color: #3b82f6;
+    }
+    .remove-btn:hover {
+      background-color: #dc2626;
+    }
+    .archive-btn:hover {
+      background-color: #4b5563;
+    }
+    .restore-btn:hover {
+      background-color: #2563eb;
+    }
+    canvas {
+      max-width: 500px; 
+      margin: 40px auto;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>Despesas Mensais - Casa 2025</h1>
+  <div class="controls">
+    <button class="btn" onclick="addRow()">Adicionar Despesa</button>
+    <button class="btn" onclick="toggleArquivadas()" id="toggle-arquivadas">Mostrar Arquivadas</button>
+  </div>
+  <table id="despesas">
+    <thead>
+      <tr>
+        <th>Descrição</th>
+        <th>Jan</th><th>Fev</th><th>Mar</th><th>Abr</th><th>Mai</th><th>Jun</th>
+        <th>Jul</th><th>Ago</th><th>Set</th><th>Out</th><th>Nov</th><th>Dez</th>
+        <th>Total Item</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody id="despesas-body">
+    </tbody>
+    <tfoot>
+      <tr>
+        <td>Total</td>
+        <td id="total-jan"></td><td id="total-fev"></td><td id="total-mar"></td><td id="total-abr"></td>
+        <td id="total-mai"></td><td id="total-jun"></td><td id="total-jul"></td><td id="total-ago"></td>
+        <td id="total-set"></td><td id="total-out"></td><td id="total-nov"></td><td id="total-dez"></td>
+        <td id="total-anual" colspan="2" style="text-align: center;"></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <canvas id="graficoGastos"></canvas>
+<script>
+  const meses = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+  // ***** NOVA URL DO WEB APP ATUALIZADA AQUI *****
+  const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx9XAjyhdtc94jXyCq357Xmf9N7DcPSrQS9SOPTai1fpeYfSeMXQyHcJ62nzqjPACjmVw/exec"; 
+  let chart = null;
+
+  async function carregarDados() {
+    const url = `${WEB_APP_URL}?action=getAllExpenses`;
+    try {
+      console.log("Tentando carregar dados de:", url); 
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        let errorBody = "Nenhum detalhe adicional do erro do servidor.";
+        try { errorBody = await response.text(); } catch (e) { /* Ignora */ }
+        console.error("Corpo da resposta do erro do servidor (carregarDados):", errorBody);
+        throw new Error(`Erro na requisição ao Web App: ${response.status} ${response.statusText}. Detalhes: ${errorBody}`);
+      }
+
+      const responseText = await response.text(); 
+      console.log("Resposta bruta do servidor (carregarDados):", responseText); 
+
+      let dadosPlanilha;
+      try {
+        dadosPlanilha = JSON.parse(responseText); 
+      } catch (parseError) {
+        console.error("Erro ao analisar JSON da resposta (carregarDados):", responseText, parseError);
+        alert("Ocorreu um erro ao processar os dados recebidos do servidor (não é JSON válido). Verifique o console.");
+        return; 
+      }
+
+      if (dadosPlanilha && dadosPlanilha.error) {
+        console.error("Erro retornado pelo Google Apps Script (carregarDados):", dadosPlanilha.error);
+        alert(`Erro do servidor ao carregar dados: ${dadosPlanilha.error}`);
+        return; 
+      }
+
+      const tbody = document.getElementById("despesas-body");
+      tbody.innerHTML = ""; 
+
+      if (Array.isArray(dadosPlanilha)) {
+        dadosPlanilha.forEach(itemDaPlanilha => {
+          const despesaFormatada = {
+            id: itemDaPlanilha.ID, 
+            descricao: itemDaPlanilha.Descricao || "Sem descrição",
+            valores: [],
+            arquivado: itemDaPlanilha.Arquivado === true || 
+                         (typeof itemDaPlanilha.Arquivado === 'string' && 
+                          (itemDaPlanilha.Arquivado.toUpperCase() === 'TRUE' || 
+                           itemDaPlanilha.Arquivado.toUpperCase() === 'SIM'))
+          };
+
+          for (let i = 0; i < meses.length; i++) {
+            const nomeMesJS = meses[i];
+            const nomeColunaValor = nomeMesJS.charAt(0).toUpperCase() + nomeMesJS.slice(1) + "_Valor"; 
+            const nomeColunaStatus = nomeMesJS.charAt(0).toUpperCase() + nomeMesJS.slice(1) + "_Status";
+            despesaFormatada.valores.push({
+              valor: parseFloat(itemDaPlanilha[nomeColunaValor]) || 0,
+              status: itemDaPlanilha[nomeColunaStatus] || ""
+            });
+          }
+          const newRowElement = addDespesaCarregada(despesaFormatada); 
+          if (newRowElement && despesaFormatada.id) {
+            newRowElement.setAttribute('data-row-id', despesaFormatada.id); 
+          }
+        });
+      } else {
+        console.warn("Os dados recebidos do servidor não são um array (carregarDados). Dados:", dadosPlanilha);
+        alert("Os dados recebidos do servidor não estão no formato esperado. Verifique o console.");
+      }
+      calcularTotais(); 
+    } catch (error) {
+      console.error("Falha ao carregar dados da planilha:", error);
+      alert(`Não foi possível carregar os dados da planilha: ${error.message}`);
+    }
+  }
+
+  function criarCelula(mesIndex, data = { valor: 0, status: "" }) {
+    const td = document.createElement("td");
+    const input = document.createElement("input");
+    input.type = "number";
+    input.value = data.valor;
+    input.oninput = () => {
+      calcularTotais();
+      // TODO: Implementar atualização da célula específica na Planilha Google
+      // const rowId = td.parentElement.getAttribute('data-row-id');
+      // console.log(`TODO: Atualizar valor do mês ${meses[mesIndex]} da despesa ID ${rowId} para ${input.value}`);
+    };
+
+    const select = document.createElement("select");
+    ["", "pago", "nao-pago"].forEach(s => {
+      const option = document.createElement("option");
+      option.value = s;
+      option.text = s === "" ? "Status" : s === "pago" ? "Pago" : "Não Pago";
+      if (data.status === s) option.selected = true;
+      select.appendChild(option);
+    });
+
+    select.onchange = () => {
+      updateStatus(select);
+      calcularTotais();
+      // TODO: Implementar atualização do status da célula específica na Planilha Google
+      // const rowId = td.parentElement.getAttribute('data-row-id');
+      // console.log(`TODO: Atualizar status do mês ${meses[mesIndex]} da despesa ID ${rowId} para ${select.value}`);
+    };
+
+    td.appendChild(input);
+    td.appendChild(document.createElement("br"));
+    td.appendChild(select);
+    updateStatus(select);
+    return td;
+  }
+
+  function addDespesaCarregada(d) { 
+    const tbody = document.getElementById("despesas-body");
+    const row = document.createElement("tr");
+    if (d.id) { 
+        row.setAttribute('data-row-id', d.id);
+    }
+
+    if (d.arquivado) {
+      row.setAttribute("data-arquivado", "true");
+      row.style.display = "none";
+    }
+    const descricaoTd = document.createElement("td"); 
+    descricaoTd.contentEditable = true;
+    descricaoTd.innerText = d.descricao;
+    descricaoTd.onblur = () => { 
+      const rowId = row.getAttribute('data-row-id');
+      if (rowId) {
+        console.log(`TODO: Atualizar descrição da despesa ID ${rowId} para ${descricaoTd.innerText}`);
+         // Chamar uma função como: atualizarDescricaoNaPlanilha(rowId, descricaoTd.innerText);
+      }
+    };
+    row.appendChild(descricaoTd);
+
+    for (let i = 0; i < 12; i++) {
+      const valorMes = d.valores[i] && typeof d.valores[i] === 'object' ? d.valores[i] : { valor: 0, status: "" };
+      row.appendChild(criarCelula(i, valorMes)); 
+    }
+
+    const totalItem = document.createElement("td");
+    totalItem.classList.add("total-item");
+    row.appendChild(totalItem);
+
+    const acoes = document.createElement("td");
+    acoes.innerHTML = `
+      <button class="archive-btn" onclick="arquivarRow(this)" style="display:${d.arquivado ? 'none' : 'inline-block'}">Arquivar</button>
+      <button class="restore-btn" onclick="restaurarRow(this)" style="display:${d.arquivado ? 'inline-block' : 'none'}">Restaurar</button>
+      <button class="remove-btn" onclick="removeRow(this)">Remover</button>
+    `;
+    row.appendChild(acoes);
+    tbody.appendChild(row);
+    return row; 
+  }
+
+  async function addRow() {
+    const novaDespesaParaPlanilha = {
+      Descricao: "Nova Despesa", 
+      Jan_Valor: 0, Jan_Status: "", Fev_Valor: 0, Fev_Status: "",
+      Mar_Valor: 0, Mar_Status: "", Abr_Valor: 0, Abr_Status: "",
+      Mai_Valor: 0, Mai_Status: "", Jun_Valor: 0, Jun_Status: "",
+      Jul_Valor: 0, Jul_Status: "", Ago_Valor: 0, Ago_Status: "",
+      Set_Valor: 0, Set_Status: "", Out_Valor: 0, Out_Status: "",
+      Nov_Valor: 0, Nov_Status: "", Dez_Valor: 0, Dez_Status: "",
+      Arquivado: "FALSE" 
+    };
+
+    try {
+      console.log("Enviando nova despesa para planilha:", novaDespesaParaPlanilha);
+      const response = await fetch(WEB_APP_URL, {
+        method: "POST",
+        mode: "cors", 
+        body: JSON.stringify({ action: "addExpense", data: novaDespesaParaPlanilha }),
+        headers: { "Content-Type": "application/json" }, 
+      });
+
+      const responseText = await response.text();
+      console.log("Resposta do servidor (addExpense):", responseText);
+      const result = JSON.parse(responseText);
+
+      if (result.error) {
+        console.error("Erro ao adicionar despesa na planilha:", result.error);
+        alert(`Erro ao salvar nova despesa: ${result.error}`);
+      } else if (result.success) {
+        console.log("Nova despesa adicionada com sucesso. ID da Planilha:", result.newId); 
+        alert("Nova despesa adicionada com sucesso!");
+        carregarDados(); 
+      } else {
+        console.error("Resposta inesperada do servidor ao adicionar despesa:", result);
+        alert("Resposta inesperada do servidor ao salvar. Verifique o console.");
+      }
+    } catch (error) {
+      console.error("Falha ao enviar nova despesa:", error);
+      alert(`Falha ao conectar com o servidor para salvar a nova despesa: ${error.message}`);
+    }
+  }
+
+  function removeRow(button) {
+    const row = button.closest("tr");
+    const rowId = row.getAttribute('data-row-id');
+    if (rowId) {
+      console.log(`TODO: Remover despesa com ID ${rowId} da planilha.`);
+      alert(`FUNCIONALIDADE PENDENTE: Remover despesa ID ${rowId} da planilha.`);
+    } else {
+        alert("Não foi possível remover: ID da despesa não encontrado.");
+    }
+    row.remove();
+    calcularTotais();
+  }
+
+  function arquivarRow(button) {
+    const row = button.closest("tr");
+    const rowId = row.getAttribute('data-row-id');
+    if(rowId){
+        console.log(`TODO: Arquivar despesa com ID ${rowId} na planilha.`);
+        alert(`FUNCIONALIDADE PENDENTE: Arquivar despesa ID ${rowId} na planilha.`);
+    }
+    row.setAttribute("data-arquivado", "true");
+    row.style.display = "none";
+    button.style.display = "none"; 
+    row.querySelector(".restore-btn").style.display = "inline-block"; 
+    calcularTotais();
+  }
+
+  function restaurarRow(button) {
+    const row = button.closest("tr");
+    const rowId = row.getAttribute('data-row-id');
+    if(rowId){
+        console.log(`TODO: Restaurar despesa com ID ${rowId} na planilha.`);
+        alert(`FUNCIONALIDADE PENDENTE: Restaurar despesa ID ${rowId} na planilha.`);
+    }
+    row.removeAttribute("data-arquivado");
+    row.style.display = ""; 
+    row.querySelector(".archive-btn").style.display = "inline-block"; 
+    button.style.display = "none"; 
+    calcularTotais();
+  }
+
+  function toggleArquivadas() {
+    const btn = document.getElementById("toggle-arquivadas");
+    const mostrar = btn.textContent.includes("Mostrar");
+    document.querySelectorAll("#despesas-body tr[data-arquivado='true']").forEach(row => {
+      row.style.display = mostrar ? "" : "none"; 
+    });
+    btn.textContent = mostrar ? "Ocultar Arquivadas" : "Mostrar Arquivadas";
+    calcularTotais(); 
+  }
+
+  function updateStatus(select) {
+    const td = select.parentElement;
+    td.classList.remove("paid", "unpaid");
+    if (select.value === "pago") td.classList.add("paid");
+    if (select.value === "nao-pago") td.classList.add("unpaid");
+  }
+
+  function calcularTotais() {
+    const totaisMes = Array(12).fill(0); 
+    const labelsGrafico = [];            
+    const valoresGrafico = [];         
+
+    const rows = document.querySelectorAll("#despesas-body tr");
+
+    rows.forEach((tr) => {
+      let totalLinhaParaGraficoEItem = 0; 
+      const descricaoCell = tr.querySelector("td[contenteditable]");
+      const descricao = descricaoCell ? descricaoCell.innerText : "N/A";
+
+
+      tr.querySelectorAll("td").forEach((td, cellIndex) => {
+        if (cellIndex >= 1 && cellIndex <= 12) { 
+          const input = td.querySelector("input[type='number']");
+          const select = td.querySelector("select");
+          const valor = input ? (parseFloat(input.value) || 0) : 0;
+          const status = select ? select.value : "";
+
+          if (status === "pago") {
+            totaisMes[cellIndex - 1] += valor;
+            if (tr.style.display !== "none") {
+              totalLinhaParaGraficoEItem += valor;
+            }
+          }
+        }
+      });
+
+      if (tr.style.display !== "none") {
+        const totalItemCell = tr.querySelector(".total-item");
+        if (totalItemCell) {
+          totalItemCell.innerText = `R$ ${totalLinhaParaGraficoEItem.toFixed(2)}`;
+        }
+        labelsGrafico.push(descricao);
+        valoresGrafico.push(totalLinhaParaGraficoEItem);
+      }
+    });
+
+    meses.forEach((mes, i) => {
+      const el = document.getElementById(`total-${mes}`);
+      if (el) el.innerText = `R$ ${totaisMes[i].toFixed(2)}`;
+    });
+
+    const totalAnual = totaisMes.reduce((acc, val) => acc + val, 0);
+    document.getElementById("total-anual").innerText = `R$ ${totalAnual.toFixed(2)}`;
+
+    desenharGrafico(labelsGrafico, valoresGrafico);
+  }
+
+  function desenharGrafico(labels, valores) {
+    const ctx = document.getElementById("graficoGastos").getContext("2d");
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: "pie",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Gastos por item (visíveis e pagos)", 
+          data: valores,
+          backgroundColor: [
+            "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#6366f1", "#ec4899",
+            "#14b8a6", "#8b5cf6", "#f97316", "#22d3ee", "#84cc16", "#f43f5e"
+          ]
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true, 
+        plugins: {
+          legend: {
+            position: 'bottom'
+          }
+        }
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    carregarDados();
+  });
+</script>
+</body>
+</html>
