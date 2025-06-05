@@ -14,6 +14,7 @@
     th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
     tfoot td { font-weight: bold; background: #e9ecef; }
     canvas { margin-top: 30px; max-width: 800px; display: block; margin-left: auto; margin-right: auto; }
+    .status-select { width: 100%; }
   </style>
 </head>
 <body>
@@ -29,8 +30,7 @@
         <th>Descrição</th>
         <th>Jan</th><th>Fev</th><th>Mar</th><th>Abr</th><th>Mai</th><th>Jun</th>
         <th>Jul</th><th>Ago</th><th>Set</th><th>Out</th><th>Nov</th><th>Dez</th>
-        <th>Total Item</th>
-        <th>Ações</th>
+        <th>Status</th><th>Total Item</th><th>Ações</th>
       </tr>
     </thead>
     <tbody id="despesas-body"></tbody>
@@ -40,7 +40,7 @@
         <td id="total-jan"></td><td id="total-fev"></td><td id="total-mar"></td><td id="total-abr"></td>
         <td id="total-mai"></td><td id="total-jun"></td><td id="total-jul"></td><td id="total-ago"></td>
         <td id="total-set"></td><td id="total-out"></td><td id="total-nov"></td><td id="total-dez"></td>
-        <td id="total-anual" colspan="2" style="text-align: center;"></td>
+        <td></td><td id="total-anual" colspan="2" style="text-align: center;"></td>
       </tr>
     </tfoot>
   </table>
@@ -65,6 +65,7 @@
         return {
           descricao: tds[0].textContent,
           valores: meses.map((_, i) => parseFloat(tds[i + 1].textContent) || 0),
+          status: tds[13].querySelector("select")?.value || "pendente",
           arquivado: linha.classList.contains("arquivado")
         };
       });
@@ -79,6 +80,10 @@
         tr.innerHTML = `
           <td contenteditable=true>${dado.descricao}</td>
           ${dado.valores.map(v => `<td contenteditable=true>${v}</td>`).join("")}
+          <td><select class="status-select" onchange="atualizarTotais()">
+            <option value="pago" ${dado.status === "pago" ? "selected" : ""}>Pago</option>
+            <option value="pendente" ${dado.status === "pendente" ? "selected" : ""}>Pendente</option>
+          </select></td>
           <td class="total-item"></td>
           <td><button onclick="arquivarLinha(this)">Arquivar</button></td>
         `;
@@ -93,6 +98,10 @@
       tr.innerHTML = `
         <td contenteditable=true></td>
         ${meses.map(() => `<td contenteditable=true>0</td>`).join("")}
+        <td><select class="status-select" onchange="atualizarTotais()">
+          <option value="pago">Pago</option>
+          <option value="pendente" selected>Pendente</option>
+        </select></td>
         <td class="total-item"></td>
         <td><button onclick="arquivarLinha(this)">Arquivar</button></td>
       `;
@@ -121,13 +130,17 @@
 
       linhas.forEach(linha => {
         const tds = linha.querySelectorAll("td");
+        const status = tds[13].querySelector("select")?.value;
         let totalItem = 0;
-        meses.forEach((_, i) => {
-          const val = parseFloat(tds[i + 1].textContent) || 0;
-          totaisMensais[i] += val;
-          totalItem += val;
-        });
-        tds[13].textContent = totalItem.toFixed(2);
+
+        if (status === "pago") {
+          meses.forEach((_, i) => {
+            const val = parseFloat(tds[i + 1].textContent) || 0;
+            totaisMensais[i] += val;
+            totalItem += val;
+          });
+        }
+        tds[14].textContent = totalItem.toFixed(2);
         totalAnual += totalItem;
       });
 
@@ -165,7 +178,7 @@
     }
 
     function enviarParaGoogleSheets(dados) {
-      fetch("https://script.google.com/macros/s/SEU_WEB_APP_URL/exec", {
+      fetch("https://script.google.com/macros/s/AKfycby_XFDCGaov3DYG0RxvFz6SySYKHzih9MlaDjfkeQMl7VpdPis7uRAvJG9oTlXB9WNJ/exec", {
         method: "POST",
         mode: "no-cors",
         headers: { "Content-Type": "application/json" },
