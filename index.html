@@ -5,106 +5,15 @@
   <title>Despesas Mensais Casa 2025</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      background: #f0f2f5;
-      margin: 0;
-      padding: 20px;
-      color: #111;
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 30px;
-    }
-    .controls {
-      text-align: center;
-      margin-bottom: 15px;
-    }
-    .btn {
-      background-color: #10b981;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 16px;
-      margin: 4px;
-    }
-    .btn:hover {
-      background-color: #059669;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      border-radius: 12px;
-      overflow: hidden;
-      background-color: white;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-    th, td {
-      padding: 10px;
-      text-align: center;
-      vertical-align: top;
-    }
-    thead th {
-      background-color: #3b82f6;
-      color: white;
-      position: sticky;
-      top: 0;
-      z-index: 1;
-    }
-    tbody td input[type="number"] {
-      width: 70px;
-      padding: 4px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      margin-bottom: 4px;
-    }
-    tbody td select {
-      padding: 4px;
-      width: 80px;
-      border-radius: 4px;
-      font-size: 12px;
-    }
-    tfoot td {
-      font-weight: bold;
-      background-color: #f9fafb;
-    }
-    .paid {
-      background-color: #d1fae5 !important;
-    }
-    .unpaid {
-      background-color: #fee2e2 !important;
-    }
-    .remove-btn, .archive-btn, .restore-btn {
-      background-color: #ef4444;
-      color: white;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      margin: 2px;
-    }
-    .archive-btn {
-      background-color: #6b7280;
-    }
-    .restore-btn {
-      background-color: #3b82f6;
-    }
-    .remove-btn:hover {
-      background-color: #dc2626;
-    }
-    .archive-btn:hover {
-      background-color: #4b5563;
-    }
-    .restore-btn:hover {
-      background-color: #2563eb;
-    }
-    canvas {
-      max-width: 900px;
-      margin: 40px auto;
-      display: block;
-    }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f7f7f7; }
+    h1 { text-align: center; }
+    .controls { margin-bottom: 15px; text-align: center; }
+    .btn { padding: 10px 20px; margin: 5px; border: none; background: #007BFF; color: #fff; cursor: pointer; border-radius: 5px; }
+    .btn:hover { background: #0056b3; }
+    table { width: 100%; border-collapse: collapse; background: #fff; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    tfoot td { font-weight: bold; background: #e9ecef; }
+    canvas { margin-top: 30px; max-width: 800px; display: block; margin-left: auto; margin-right: auto; }
   </style>
 </head>
 <body>
@@ -112,6 +21,7 @@
   <div class="controls">
     <button class="btn" onclick="addRow()">Adicionar Despesa</button>
     <button class="btn" onclick="toggleArquivadas()" id="toggle-arquivadas">Mostrar Arquivadas</button>
+    <button class="btn" onclick="exportarDados()">Exportar Dados</button>
   </div>
   <table id="despesas">
     <thead>
@@ -134,212 +44,139 @@
       </tr>
     </tfoot>
   </table>
-
   <canvas id="graficoGastos"></canvas>
 
-<script>
-  const endpointGoogle = "https://script.google.com/macros/s/AKfycby_XFDCGaov3DYG0RxvFz6SySYKHzih9MlaDjfkeQMl7VpdPis7uRAvJG9oTlXB9WNJ/exec";
-  const meses = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
-  let chart = null;
+  <script>
+    const meses = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
-  function enviarParaGoogleSheets(dados) {
-    fetch(endpointGoogle, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        aba: "Despesas_Data",
-        dados: dados
-      })
-    })
-    .then(response => response.json())
-    .then(res => console.log("Google Sheets:", res))
-    .catch(err => console.error("Erro ao enviar para Sheets:", err));
-  }
-
-  function salvarDados() {
-    const rows = [...document.querySelectorAll("#despesas-body tr")];
-    const dados = rows.map(row => {
-      const descricao = row.querySelector("td[contenteditable]").innerText;
-      const celulas = [...row.querySelectorAll("td")].slice(1, 13);
-      const valores = celulas.map(td => ({
-        valor: parseFloat(td.querySelector("input")?.value) || 0,
-        status: td.querySelector("select")?.value
-      }));
-      const arquivado = row.getAttribute('data-arquivado') === 'true';
-      return { descricao, valores, arquivado };
-    });
-    localStorage.setItem("despesas2025", JSON.stringify(dados));
-    enviarParaGoogleSheets(dados);
-  }
-
-  function carregarDados() {
-    const dados = JSON.parse(localStorage.getItem("despesas2025")) || [];
-    dados.forEach(despesa => addDespesaCarregada(despesa));
-    calcularTotais();
-  }
-
-  function criarCelula(mesIndex, data = { valor: 0, status: "" }) {
-    const td = document.createElement("td");
-    const input = document.createElement("input");
-    input.type = "number";
-    input.value = data.valor;
-    input.oninput = () => { calcularTotais(); salvarDados(); };
-
-    const select = document.createElement("select");
-    ["", "pago", "nao-pago"].forEach(s => {
-      const option = document.createElement("option");
-      option.value = s;
-      option.text = s === "" ? "Status" : s === "pago" ? "Pago" : "Não Pago";
-      if (data.status === s) option.selected = true;
-      select.appendChild(option);
-    });
-    select.onchange = () => { updateStatus(select); calcularTotais(); salvarDados(); };
-
-    td.appendChild(input);
-    td.appendChild(document.createElement("br"));
-    td.appendChild(select);
-    updateStatus(select);
-    return td;
-  }
-
-  function addDespesaCarregada(d) {
-    const tbody = document.getElementById("despesas-body");
-    const row = document.createElement("tr");
-    if (d.arquivado) {
-      row.setAttribute("data-arquivado", "true");
-      row.style.display = "none";
+    function salvarLocal() {
+      localStorage.setItem("despesas", JSON.stringify(getDadosTabela()));
     }
-    const descricao = document.createElement("td");
-    descricao.contentEditable = true;
-    descricao.innerText = d.descricao;
-    descricao.oninput = salvarDados;
-    row.appendChild(descricao);
-    for (let i = 0; i < 12; i++) row.appendChild(criarCelula(i, d.valores[i]));
-    const totalItem = document.createElement("td"); totalItem.classList.add("total-item"); row.appendChild(totalItem);
-    const acoes = document.createElement("td");
-    acoes.innerHTML = `
-      <button class="archive-btn" onclick="arquivarRow(this)">Arquivar</button>
-      <button class="restore-btn" onclick="restaurarRow(this)" style="display:${d.arquivado ? 'inline-block' : 'none'}">Restaurar</button>
-      <button class="remove-btn" onclick="removeRow(this)">Remover</button>
-    `;
-    row.appendChild(acoes);
-    tbody.appendChild(row);
-  }
 
-  function addRow() {
-    addDespesaCarregada({ descricao: "Nova Despesa", valores: Array(12).fill({ valor: 0, status: "" }), arquivado: false });
-    calcularTotais();
-    salvarDados();
-  }
+    function carregarLocal() {
+      const dados = localStorage.getItem("despesas");
+      if (dados) preencherTabela(JSON.parse(dados));
+    }
 
-  function removeRow(button) {
-    button.closest("tr").remove();
-    calcularTotais();
-    salvarDados();
-  }
+    function getDadosTabela() {
+      const linhas = document.querySelectorAll("#despesas-body tr");
+      return Array.from(linhas).map(linha => {
+        const tds = linha.querySelectorAll("td");
+        return {
+          descricao: tds[0].textContent,
+          valores: meses.map((_, i) => parseFloat(tds[i + 1].textContent) || 0),
+          arquivado: linha.classList.contains("arquivado")
+        };
+      });
+    }
 
-  function arquivarRow(button) {
-    const row = button.closest("tr");
-    row.setAttribute("data-arquivado", "true");
-    row.style.display = "none";
-    button.style.display = "none";
-    row.querySelector(".restore-btn").style.display = "inline-block";
-    calcularTotais();
-    salvarDados();
-  }
+    function preencherTabela(dados) {
+      const tbody = document.getElementById("despesas-body");
+      tbody.innerHTML = "";
+      dados.forEach(dado => {
+        const tr = document.createElement("tr");
+        if (dado.arquivado) tr.classList.add("arquivado");
+        tr.innerHTML = `
+          <td contenteditable=true>${dado.descricao}</td>
+          ${dado.valores.map(v => `<td contenteditable=true>${v}</td>`).join("")}
+          <td class="total-item"></td>
+          <td><button onclick="arquivarLinha(this)">Arquivar</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+      atualizarTotais();
+    }
 
-  function restaurarRow(button) {
-    const row = button.closest("tr");
-    row.removeAttribute("data-arquivado");
-    row.style.display = "";
-    row.querySelector(".archive-btn").style.display = "inline-block";
-    button.style.display = "none";
-    calcularTotais();
-    salvarDados();
-  }
+    function addRow() {
+      const tbody = document.getElementById("despesas-body");
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td contenteditable=true></td>
+        ${meses.map(() => `<td contenteditable=true>0</td>`).join("")}
+        <td class="total-item"></td>
+        <td><button onclick="arquivarLinha(this)">Arquivar</button></td>
+      `;
+      tbody.appendChild(tr);
+      atualizarTotais();
+    }
 
-  function toggleArquivadas() {
-    const btn = document.getElementById("toggle-arquivadas");
-    const mostrar = btn.textContent.includes("Mostrar");
-    document.querySelectorAll("#despesas-body tr[data-arquivado='true']").forEach(row => {
-      row.style.display = mostrar ? "" : "none";
-    });
-    btn.textContent = mostrar ? "Ocultar Arquivadas" : "Mostrar Arquivadas";
-    calcularTotais();
-  }
+    function arquivarLinha(btn) {
+      const tr = btn.closest("tr");
+      tr.classList.toggle("arquivado");
+      salvarLocal();
+      atualizarTotais();
+    }
 
-  function updateStatus(select) {
-    const td = select.parentElement;
-    td.classList.remove("paid", "unpaid");
-    if (select.value === "pago") td.classList.add("paid");
-    if (select.value === "nao-pago") td.classList.add("unpaid");
-  }
+    function toggleArquivadas() {
+      const btn = document.getElementById("toggle-arquivadas");
+      const arquivadas = document.querySelectorAll(".arquivado");
+      arquivadas.forEach(l => l.style.display = l.style.display === "none" ? "table-row" : "none");
+      btn.textContent = btn.textContent.includes("Mostrar") ? "Esconder Arquivadas" : "Mostrar Arquivadas";
+    }
 
-  function calcularTotais() {
-    const totaisMes = Array(12).fill(0);
-    const labelsGrafico = [], valoresGrafico = [];
-    const rows = document.querySelectorAll("#despesas-body tr");
+    function atualizarTotais() {
+      const linhas = document.querySelectorAll("#despesas-body tr:not(.arquivado)");
+      let totaisMensais = new Array(12).fill(0);
+      let totalAnual = 0;
 
-    rows.forEach((tr) => {
-      let totalLinha = 0;
-      const descricao = tr.querySelector("td[contenteditable]").innerText;
-
-      tr.querySelectorAll("td").forEach((td, i) => {
-        if (i >= 1 && i <= 12) {
-          const valor = parseFloat(td.querySelector("input")?.value) || 0;
-          const status = td.querySelector("select")?.value;
-          if (status === "pago") {
-            totaisMes[i - 1] += valor;
-            if (tr.style.display !== "none") totalLinha += valor;
-          }
-        }
+      linhas.forEach(linha => {
+        const tds = linha.querySelectorAll("td");
+        let totalItem = 0;
+        meses.forEach((_, i) => {
+          const val = parseFloat(tds[i + 1].textContent) || 0;
+          totaisMensais[i] += val;
+          totalItem += val;
+        });
+        tds[13].textContent = totalItem.toFixed(2);
+        totalAnual += totalItem;
       });
 
-      if (tr.style.display !== "none") {
-        tr.querySelector(".total-item").innerText = `R$ ${totalLinha.toFixed(2)}`;
-        labelsGrafico.push(descricao);
-        valoresGrafico.push(totalLinha);
-      }
+      meses.forEach((m, i) => {
+        document.getElementById(`total-${m}`).textContent = totaisMensais[i].toFixed(2);
+      });
+      document.getElementById("total-anual").textContent = totalAnual.toFixed(2);
+
+      salvarLocal();
+      desenharGrafico(totaisMensais);
+      enviarParaGoogleSheets(getDadosTabela());
+    }
+
+    function desenharGrafico(valores) {
+      const ctx = document.getElementById("graficoGastos").getContext("2d");
+      if (window.grafico) window.grafico.destroy();
+      window.grafico = new Chart(ctx, {
+        type: "pie",
+        data: {
+          labels: meses.map(m => m.charAt(0).toUpperCase() + m.slice(1)),
+          datasets: [{ data: valores, backgroundColor: [...Array(12).keys()].map(i => `hsl(${i * 30}, 70%, 60%)`) }]
+        },
+        options: { responsive: true }
+      });
+    }
+
+    function exportarDados() {
+      const dados = JSON.stringify(getDadosTabela(), null, 2);
+      const blob = new Blob([dados], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "despesas.json";
+      a.click();
+    }
+
+    function enviarParaGoogleSheets(dados) {
+      fetch("https://script.google.com/macros/s/SEU_WEB_APP_URL/exec", {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sheet: "Despesas_Data", dados })
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      carregarLocal();
+      setInterval(atualizarTotais, 10000);
     });
-
-    meses.forEach((mes, i) => {
-      document.getElementById(`total-${mes}`).innerText = `R$ ${totaisMes[i].toFixed(2)}`;
-    });
-
-    const totalAnual = totaisMes.reduce((acc, val) => acc + val, 0);
-    document.getElementById("total-anual").innerText = `R$ ${totalAnual.toFixed(2)}`;
-    desenharGrafico(labelsGrafico, valoresGrafico);
-  }
-
-  function desenharGrafico(labels, valores) {
-    const ctx = document.getElementById("graficoGastos").getContext("2d");
-    if (chart) chart.destroy();
-    chart = new Chart(ctx, {
-      type: "pie",
-      data: {
-        labels: labels,
-        datasets: [{
-          label: "Gastos por item (visíveis e pagos)",
-          data: valores,
-          backgroundColor: [
-            "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#6366f1", "#ec4899",
-            "#14b8a6", "#8b5cf6", "#f97316", "#22d3ee", "#84cc16", "#f43f5e"
-          ]
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: {
-          legend: { position: 'bottom' }
-        }
-      }
-    });
-  }
-
-  document.addEventListener("DOMContentLoaded", carregarDados);
-</script>
+  </script>
 </body>
 </html>
