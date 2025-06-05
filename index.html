@@ -5,16 +5,40 @@
   <title>Despesas Mensais Casa 2025</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #f7f7f7; }
-    h1 { text-align: center; }
-    .controls { margin-bottom: 15px; text-align: center; }
-    .btn { padding: 10px 20px; margin: 5px; border: none; background: #007BFF; color: #fff; cursor: pointer; border-radius: 5px; }
-    .btn:hover { background: #0056b3; }
-    table { width: 100%; border-collapse: collapse; background: #fff; margin-top: 10px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-    tfoot td { font-weight: bold; background: #e9ecef; }
-    canvas { margin-top: 30px; max-width: 800px; display: block; margin-left: auto; margin-right: auto; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f4f4f4; }
+    h1 { text-align: center; color: #333; }
+    .controls { text-align: center; margin-bottom: 20px; }
+    .btn {
+      padding: 10px 15px;
+      margin: 0 5px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .btn:hover { background-color: #0056b3; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: #fff;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background-color: #007bff;
+      color: white;
+    }
+    tfoot td {
+      font-weight: bold;
+      background-color: #e9ecef;
+    }
+    .arquivado { background-color: #eee; color: #999; }
     .status-select { width: 100%; }
+    canvas { margin-top: 30px; max-width: 700px; margin-left: auto; margin-right: auto; }
   </style>
 </head>
 <body>
@@ -63,8 +87,8 @@
       return Array.from(linhas).map(linha => {
         const tds = linha.querySelectorAll("td");
         return {
-          descricao: tds[0].textContent,
-          valores: meses.map((_, i) => parseFloat(tds[i + 1].textContent) || 0),
+          descricao: tds[0].textContent.trim(),
+          valores: meses.map((_, i) => parseFloat(tds[i + 1].textContent.trim()) || 0),
           status: tds[13].querySelector("select")?.value || "pendente",
           arquivado: linha.classList.contains("arquivado")
         };
@@ -79,7 +103,7 @@
         if (dado.arquivado) tr.classList.add("arquivado");
         tr.innerHTML = `
           <td contenteditable=true>${dado.descricao}</td>
-          ${dado.valores.map(v => `<td contenteditable=true>${v}</td>`).join("")}
+          ${dado.valores.map(v => `<td contenteditable=true>${v.toFixed(2)}</td>`).join("")}
           <td><select class="status-select" onchange="atualizarTotais()">
             <option value="pago" ${dado.status === "pago" ? "selected" : ""}>Pago</option>
             <option value="pendente" ${dado.status === "pendente" ? "selected" : ""}>Pendente</option>
@@ -93,11 +117,10 @@
     }
 
     function addRow() {
-      const tbody = document.getElementById("despesas-body");
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td contenteditable=true></td>
-        ${meses.map(() => `<td contenteditable=true>0</td>`).join("")}
+        ${meses.map(() => `<td contenteditable=true>0.00</td>`).join("")}
         <td><select class="status-select" onchange="atualizarTotais()">
           <option value="pago">Pago</option>
           <option value="pendente" selected>Pendente</option>
@@ -105,7 +128,7 @@
         <td class="total-item"></td>
         <td><button onclick="arquivarLinha(this)">Arquivar</button></td>
       `;
-      tbody.appendChild(tr);
+      document.getElementById("despesas-body").appendChild(tr);
       atualizarTotais();
     }
 
@@ -140,6 +163,7 @@
             totalItem += val;
           });
         }
+
         tds[14].textContent = totalItem.toFixed(2);
         totalAnual += totalItem;
       });
@@ -161,7 +185,10 @@
         type: "pie",
         data: {
           labels: meses.map(m => m.charAt(0).toUpperCase() + m.slice(1)),
-          datasets: [{ data: valores, backgroundColor: [...Array(12).keys()].map(i => `hsl(${i * 30}, 70%, 60%)`) }]
+          datasets: [{
+            data: valores,
+            backgroundColor: [...Array(12).keys()].map(i => `hsl(${i * 30}, 70%, 60%)`)
+          }]
         },
         options: { responsive: true }
       });
@@ -178,7 +205,7 @@
     }
 
     function enviarParaGoogleSheets(dados) {
-      fetch("https://script.google.com/macros/s/AKfycby_XFDCGaov3DYG0RxvFz6SySYKHzih9MlaDjfkeQMl7VpdPis7uRAvJG9oTlXB9WNJ/exec", {
+      fetch("https://script.google.com/macros/s/SEU_WEB_APP_URL/exec", {
         method: "POST",
         mode: "no-cors",
         headers: { "Content-Type": "application/json" },
