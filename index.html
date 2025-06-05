@@ -101,7 +101,7 @@
       background-color: #2563eb;
     }
     canvas {
-      max-width: 900px; /* Alterado de 400px para 500px */
+      max-width: 900px;
       margin: 40px auto;
       display: block;
     }
@@ -123,8 +123,7 @@
         <th>Ações</th>
       </tr>
     </thead>
-    <tbody id="despesas-body">
-    </tbody>
+    <tbody id="despesas-body"></tbody>
     <tfoot>
       <tr>
         <td>Total</td>
@@ -137,25 +136,42 @@
   </table>
 
   <canvas id="graficoGastos"></canvas>
+
 <script>
+  const endpointGoogle = "https://script.google.com/macros/s/AKfycbx9XAjyhdtc94jXyCq357Xmf9N7DcPSrQS9SOPTai1fpeYfSeMXQyHcJ62nzqjPACjmVw/exec";
   const meses = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
   let chart = null;
+
+  function enviarParaGoogleSheets(dados) {
+    fetch(endpointGoogle, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        aba: "Despesas_Data",
+        dados: dados
+      })
+    })
+    .then(response => response.json())
+    .then(res => console.log("Google Sheets:", res))
+    .catch(err => console.error("Erro ao enviar para Sheets:", err));
+  }
 
   function salvarDados() {
     const rows = [...document.querySelectorAll("#despesas-body tr")];
     const dados = rows.map(row => {
       const descricao = row.querySelector("td[contenteditable]").innerText;
       const celulas = [...row.querySelectorAll("td")].slice(1, 13);
-      const valores = celulas.map(td => {
-        return {
-          valor: parseFloat(td.querySelector("input").value) || 0,
-          status: td.querySelector("select").value
-        };
-      });
+      const valores = celulas.map(td => ({
+        valor: parseFloat(td.querySelector("input")?.value) || 0,
+        status: td.querySelector("select")?.value
+      }));
       const arquivado = row.getAttribute('data-arquivado') === 'true';
       return { descricao, valores, arquivado };
     });
     localStorage.setItem("despesas2025", JSON.stringify(dados));
+    enviarParaGoogleSheets(dados);
   }
 
   function carregarDados() {
@@ -169,10 +185,7 @@
     const input = document.createElement("input");
     input.type = "number";
     input.value = data.valor;
-    input.oninput = () => {
-      calcularTotais();
-      salvarDados();
-    };
+    input.oninput = () => { calcularTotais(); salvarDados(); };
 
     const select = document.createElement("select");
     ["", "pago", "nao-pago"].forEach(s => {
@@ -182,12 +195,7 @@
       if (data.status === s) option.selected = true;
       select.appendChild(option);
     });
-
-    select.onchange = () => {
-      updateStatus(select);
-      calcularTotais();
-      salvarDados();
-    };
+    select.onchange = () => { updateStatus(select); calcularTotais(); salvarDados(); };
 
     td.appendChild(input);
     td.appendChild(document.createElement("br"));
@@ -206,20 +214,10 @@
     const descricao = document.createElement("td");
     descricao.contentEditable = true;
     descricao.innerText = d.descricao;
-    descricao.oninput = () => {
-      // Não precisa chamar calcularTotais() aqui diretamente se já é chamado pelo input do valor
-      salvarDados();
-    };
+    descricao.oninput = salvarDados;
     row.appendChild(descricao);
-
-    for (let i = 0; i < 12; i++) {
-      row.appendChild(criarCelula(i, d.valores[i]));
-    }
-
-    const totalItem = document.createElement("td");
-    totalItem.classList.add("total-item");
-    row.appendChild(totalItem);
-
+    for (let i = 0; i < 12; i++) row.appendChild(criarCelula(i, d.valores[i]));
+    const totalItem = document.createElement("td"); totalItem.classList.add("total-item"); row.appendChild(totalItem);
     const acoes = document.createElement("td");
     acoes.innerHTML = `
       <button class="archive-btn" onclick="arquivarRow(this)">Arquivar</button>
@@ -231,14 +229,9 @@
   }
 
   function addRow() {
-    addDespesaCarregada({
-      descricao: "Nova Despesa",
-      valores: Array(12).fill({ valor: 0, status: "" }),
-      arquivado: false
-    });
-    // Chamar calcularTotais após adicionar uma nova linha para atualizar os totais do rodapé e gráfico
+    addDespesaCarregada({ descricao: "Nova Despesa", valores: Array(12).fill({ valor: 0, status: "" }), arquivado: false });
     calcularTotais();
-    salvarDados(); // Salvar o estado inicial da nova linha
+    salvarDados();
   }
 
   function removeRow(button) {
@@ -251,8 +244,8 @@
     const row = button.closest("tr");
     row.setAttribute("data-arquivado", "true");
     row.style.display = "none";
-    button.style.display = "none"; // Oculta o botão de arquivar
-    row.querySelector(".restore-btn").style.display = "inline-block"; // Mostra o de restaurar
+    button.style.display = "none";
+    row.querySelector(".restore-btn").style.display = "inline-block";
     calcularTotais();
     salvarDados();
   }
@@ -260,22 +253,21 @@
   function restaurarRow(button) {
     const row = button.closest("tr");
     row.removeAttribute("data-arquivado");
-    row.style.display = ""; // Torna a linha visível
-    row.querySelector(".archive-btn").style.display = "inline-block"; // Mostra o botão de arquivar
-    button.style.display = "none"; // Oculta o botão de restaurar
+    row.style.display = "";
+    row.querySelector(".archive-btn").style.display = "inline-block";
+    button.style.display = "none";
     calcularTotais();
     salvarDados();
   }
 
-  // MODIFICADA: toggleArquivadas
   function toggleArquivadas() {
     const btn = document.getElementById("toggle-arquivadas");
     const mostrar = btn.textContent.includes("Mostrar");
     document.querySelectorAll("#despesas-body tr[data-arquivado='true']").forEach(row => {
-      row.style.display = mostrar ? "" : "none"; // "" torna visível (remove display:none), "none" oculta
+      row.style.display = mostrar ? "" : "none";
     });
     btn.textContent = mostrar ? "Ocultar Arquivadas" : "Mostrar Arquivadas";
-    calcularTotais(); // Adicionado para recalcular e redesenhar
+    calcularTotais();
   }
 
   function updateStatus(select) {
@@ -285,64 +277,39 @@
     if (select.value === "nao-pago") td.classList.add("unpaid");
   }
 
-  // MODIFICADA: calcularTotais
   function calcularTotais() {
-    const totaisMes = Array(12).fill(0); // Para os totais mensais no rodapé
-    const labelsGrafico = [];             // Para as legendas do gráfico
-    const valoresGrafico = [];          // Para os valores do gráfico
-
+    const totaisMes = Array(12).fill(0);
+    const labelsGrafico = [], valoresGrafico = [];
     const rows = document.querySelectorAll("#despesas-body tr");
 
     rows.forEach((tr) => {
-      let totalLinhaParaGraficoEItem = 0; // Total para esta linha específica, se estiver visível
+      let totalLinha = 0;
       const descricao = tr.querySelector("td[contenteditable]").innerText;
 
-      // Itera pelas células de cada mês na linha atual
-      tr.querySelectorAll("td").forEach((td, cellIndex) => {
-        // As células de mês vão do índice 1 (Jan) ao 12 (Dez)
-        if (cellIndex >= 1 && cellIndex <= 12) {
-          const input = td.querySelector("input");
-          const select = td.querySelector("select");
-          const valor = parseFloat(input?.value) || 0;
-          const status = select?.value;
-
+      tr.querySelectorAll("td").forEach((td, i) => {
+        if (i >= 1 && i <= 12) {
+          const valor = parseFloat(td.querySelector("input")?.value) || 0;
+          const status = td.querySelector("select")?.value;
           if (status === "pago") {
-            // Sempre adiciona aos totais mensais globais, independentemente da visibilidade da linha ou status de arquivamento
-            totaisMes[cellIndex - 1] += valor;
-
-            // Se a linha estiver atualmente visível, adiciona ao seu total individual para gráfico/exibição
-            // Uma linha está oculta se seu estilo 'display' for 'none'
-            if (tr.style.display !== "none") {
-              totalLinhaParaGraficoEItem += valor;
-            }
+            totaisMes[i - 1] += valor;
+            if (tr.style.display !== "none") totalLinha += valor;
           }
         }
       });
 
-      // Atualiza a célula "Total Item" e prepara dados para o gráfico SOMENTE se a linha estiver visível
       if (tr.style.display !== "none") {
-        const totalItemCell = tr.querySelector(".total-item");
-        if (totalItemCell) {
-          totalItemCell.innerText = `R$ ${totalLinhaParaGraficoEItem.toFixed(2)}`;
-        }
+        tr.querySelector(".total-item").innerText = `R$ ${totalLinha.toFixed(2)}`;
         labelsGrafico.push(descricao);
-        valoresGrafico.push(totalLinhaParaGraficoEItem);
+        valoresGrafico.push(totalLinha);
       }
-      // Se a linha estiver oculta (display:none), seu "Total Item" não será atualizado aqui,
-      // e ela não será incluída no gráfico. Quando se tornar visível novamente,
-      // calcularTotais() será chamado e irá atualizar corretamente.
     });
 
-    // Atualiza os totais no rodapé (estes agora incluem corretamente todos os valores 'pago')
     meses.forEach((mes, i) => {
-      const el = document.getElementById(`total-${mes}`);
-      if (el) el.innerText = `R$ ${totaisMes[i].toFixed(2)}`;
+      document.getElementById(`total-${mes}`).innerText = `R$ ${totaisMes[i].toFixed(2)}`;
     });
 
     const totalAnual = totaisMes.reduce((acc, val) => acc + val, 0);
     document.getElementById("total-anual").innerText = `R$ ${totalAnual.toFixed(2)}`;
-
-    // Redesenha o gráfico com dados SOMENTE dos itens VISÍVEIS
     desenharGrafico(labelsGrafico, valoresGrafico);
   }
 
@@ -354,7 +321,7 @@
       data: {
         labels: labels,
         datasets: [{
-          label: "Gastos por item (visíveis e pagos)", // Label do dataset atualizado
+          label: "Gastos por item (visíveis e pagos)",
           data: valores,
           backgroundColor: [
             "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#6366f1", "#ec4899",
@@ -364,19 +331,15 @@
       },
       options: {
         responsive: true,
-        maintainAspectRatio: true, // Adicionado para melhor controle com max-width
+        maintainAspectRatio: true,
         plugins: {
-          legend: {
-            position: 'bottom'
-          }
+          legend: { position: 'bottom' }
         }
       }
     });
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    carregarDados();
-  });
+  document.addEventListener("DOMContentLoaded", carregarDados);
 </script>
 </body>
 </html>
