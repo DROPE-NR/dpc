@@ -2,234 +2,381 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Controle de Despesas</title>
+  <title>Despesas Mensais Casa 2025</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f0f2f5;
+      margin: 0;
+      padding: 20px;
+      color: #111;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .controls {
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    .btn {
+      background-color: #10b981;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 4px;
+    }
+    .btn:hover {
+      background-color: #059669;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 20px;
+      border-radius: 12px;
+      overflow: hidden;
+      background-color: white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
     th, td {
-      border: 1px solid #ccc;
-      padding: 4px;
+      padding: 10px;
       text-align: center;
+      vertical-align: top;
     }
-    th {
-      background-color: #f0f0f0;
+    thead th {
+      background-color: #3b82f6;
+      color: white;
+      position: sticky;
+      top: 0;
+      z-index: 1;
     }
-    td[contenteditable] {
-      background-color: #ffffe0;
+    tbody td input[type="number"] {
+      width: 70px;
+      padding: 4px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-bottom: 4px;
     }
-    .total {
+    tbody td select {
+      padding: 4px;
+      width: 80px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    tfoot td {
       font-weight: bold;
-      background-color: #e0f7fa;
+      background-color: #f9fafb;
     }
-    .total-anual {
-      background-color: #c8e6c9;
+    .paid {
+      background-color: #d1fae5 !important;
+    }
+    .unpaid {
+      background-color: #fee2e2 !important;
+    }
+    .remove-btn, .archive-btn, .restore-btn {
+      background-color: #ef4444;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 2px;
+    }
+    .archive-btn {
+      background-color: #6b7280;
+    }
+    .restore-btn {
+      background-color: #3b82f6;
+    }
+    .remove-btn:hover {
+      background-color: #dc2626;
+    }
+    .archive-btn:hover {
+      background-color: #4b5563;
+    }
+    .restore-btn:hover {
+      background-color: #2563eb;
+    }
+    canvas {
+      max-width: 900px; /* Alterado de 400px para 500px */
+      margin: 40px auto;
+      display: block;
     }
   </style>
 </head>
 <body>
-  <h2>Controle de Despesas Mensais</h2>
-  <table>
+  <h1>Despesas Mensais - Casa 2025</h1>
+  <div class="controls">
+    <button class="btn" onclick="addRow()">Adicionar Despesa</button>
+    <button class="btn" onclick="toggleArquivadas()" id="toggle-arquivadas">Mostrar Arquivadas</button>
+  </div>
+  <table id="despesas">
     <thead>
       <tr>
-        <th>Item</th>
+        <th>Descrição</th>
         <th>Jan</th><th>Fev</th><th>Mar</th><th>Abr</th><th>Mai</th><th>Jun</th>
         <th>Jul</th><th>Ago</th><th>Set</th><th>Out</th><th>Nov</th><th>Dez</th>
         <th>Total Item</th>
+        <th>Ações</th>
       </tr>
     </thead>
-    <tbody id="despesas-body"></tbody>
+    <tbody id="despesas-body">
+    </tbody>
     <tfoot>
-      <tr class="total">
-        <td>Total Mês</td>
-        <td id="total-janeiro"></td><td id="total-fevereiro"></td><td id="total-marco"></td>
-        <td id="total-abril"></td><td id="total-maio"></td><td id="total-junho"></td>
-        <td id="total-julho"></td><td id="total-agosto"></td><td id="total-setembro"></td>
-        <td id="total-outubro"></td><td id="total-novembro"></td><td id="total-dezembro"></td>
-        <td id="total-anual" class="total-anual"></td>
+      <tr>
+        <td>Total</td>
+        <td id="total-jan"></td><td id="total-fev"></td><td id="total-mar"></td><td id="total-abr"></td>
+        <td id="total-mai"></td><td id="total-jun"></td><td id="total-jul"></td><td id="total-ago"></td>
+        <td id="total-set"></td><td id="total-out"></td><td id="total-nov"></td><td id="total-dez"></td>
+        <td id="total-anual" colspan="2" style="text-align: center;"></td>
       </tr>
     </tfoot>
   </table>
 
-  <canvas id="graficoGastos" width="400" height="200"></canvas>
+  <canvas id="graficoGastos"></canvas>
+<script>
+  const meses = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+  let chart = null;
 
-  <script>
-    const meses = [
-      "janeiro", "fevereiro", "marco", "abril", "maio", "junho",
-      "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
-    ];
-    let chart = null;
+  function salvarDados() {
+    const rows = [...document.querySelectorAll("#despesas-body tr")];
+    const dados = rows.map(row => {
+      const descricao = row.querySelector("td[contenteditable]").innerText;
+      const celulas = [...row.querySelectorAll("td")].slice(1, 13);
+      const valores = celulas.map(td => {
+        return {
+          valor: parseFloat(td.querySelector("input").value) || 0,
+          status: td.querySelector("select").value
+        };
+      });
+      const arquivado = row.getAttribute('data-arquivado') === 'true';
+      return { descricao, valores, arquivado };
+    });
+    localStorage.setItem("despesas2025", JSON.stringify(dados));
+  }
 
-    function criarLinha(dados = null) {
-      const tr = document.createElement("tr");
+  function carregarDados() {
+    const dados = JSON.parse(localStorage.getItem("despesas2025")) || [];
+    dados.forEach(despesa => addDespesaCarregada(despesa));
+    calcularTotais();
+  }
 
-      const tdDescricao = document.createElement("td");
-      tdDescricao.contentEditable = true;
-      tdDescricao.innerText = dados?.descricao || "";
-      tr.appendChild(tdDescricao);
+  function criarCelula(mesIndex, data = { valor: 0, status: "" }) {
+    const td = document.createElement("td");
+    const input = document.createElement("input");
+    input.type = "number";
+    input.value = data.valor;
+    input.oninput = () => {
+      calcularTotais();
+      salvarDados();
+    };
 
-      for (let i = 0; i < 12; i++) {
-        const td = document.createElement("td");
-        const input = document.createElement("input");
-        input.type = "number";
-        input.min = 0;
-        input.value = dados?.valores?.[i]?.valor || "";
+    const select = document.createElement("select");
+    ["", "pago", "nao-pago"].forEach(s => {
+      const option = document.createElement("option");
+      option.value = s;
+      option.text = s === "" ? "Status" : s === "pago" ? "Pago" : "Não Pago";
+      if (data.status === s) option.selected = true;
+      select.appendChild(option);
+    });
 
-        const select = document.createElement("select");
-        const optionPago = new Option("Pago", "pago");
-        const optionNaoPago = new Option("Não Pago", "nao-pago");
-        select.append(optionPago, optionNaoPago);
-        select.value = dados?.valores?.[i]?.status || "nao-pago";
+    select.onchange = () => {
+      updateStatus(select);
+      calcularTotais();
+      salvarDados();
+    };
 
-        input.addEventListener("input", salvarEDepoisCalcular);
-        select.addEventListener("change", salvarEDepoisCalcular);
+    td.appendChild(input);
+    td.appendChild(document.createElement("br"));
+    td.appendChild(select);
+    updateStatus(select);
+    return td;
+  }
 
-        td.appendChild(input);
-        td.appendChild(select);
-        tr.appendChild(td);
-      }
+  function addDespesaCarregada(d) {
+    const tbody = document.getElementById("despesas-body");
+    const row = document.createElement("tr");
+    if (d.arquivado) {
+      row.setAttribute("data-arquivado", "true");
+      row.style.display = "none";
+    }
+    const descricao = document.createElement("td");
+    descricao.contentEditable = true;
+    descricao.innerText = d.descricao;
+    descricao.oninput = () => {
+      // Não precisa chamar calcularTotais() aqui diretamente se já é chamado pelo input do valor
+      salvarDados();
+    };
+    row.appendChild(descricao);
 
-      const tdTotalItem = document.createElement("td");
-      tdTotalItem.classList.add("total-item");
-      tr.appendChild(tdTotalItem);
-
-      document.getElementById("despesas-body").appendChild(tr);
+    for (let i = 0; i < 12; i++) {
+      row.appendChild(criarCelula(i, d.valores[i]));
     }
 
-    function calcularTotais() {
-      const totaisMes = Array(12).fill(0); 
-      const labelsGrafico = [];            
-      const valoresGrafico = [];          
+    const totalItem = document.createElement("td");
+    totalItem.classList.add("total-item");
+    row.appendChild(totalItem);
 
-      const rows = document.querySelectorAll("#despesas-body tr");
+    const acoes = document.createElement("td");
+    acoes.innerHTML = `
+      <button class="archive-btn" onclick="arquivarRow(this)">Arquivar</button>
+      <button class="restore-btn" onclick="restaurarRow(this)" style="display:${d.arquivado ? 'inline-block' : 'none'}">Restaurar</button>
+      <button class="remove-btn" onclick="removeRow(this)">Remover</button>
+    `;
+    row.appendChild(acoes);
+    tbody.appendChild(row);
+  }
 
-      rows.forEach((tr) => {
-        let totalLinha = 0; 
-        const descricaoCell = tr.querySelector("td[contenteditable]");
-        const descricao = descricaoCell ? descricaoCell.innerText.trim() : "N/A";
+  function addRow() {
+    addDespesaCarregada({
+      descricao: "Nova Despesa",
+      valores: Array(12).fill({ valor: 0, status: "" }),
+      arquivado: false
+    });
+    // Chamar calcularTotais após adicionar uma nova linha para atualizar os totais do rodapé e gráfico
+    calcularTotais();
+    salvarDados(); // Salvar o estado inicial da nova linha
+  }
 
-        const cells = tr.querySelectorAll("td");
-        for (let i = 1; i <= 12; i++) { 
-          const td = cells[i];
-          if (!td) continue;
+  function removeRow(button) {
+    button.closest("tr").remove();
+    calcularTotais();
+    salvarDados();
+  }
 
+  function arquivarRow(button) {
+    const row = button.closest("tr");
+    row.setAttribute("data-arquivado", "true");
+    row.style.display = "none";
+    button.style.display = "none"; // Oculta o botão de arquivar
+    row.querySelector(".restore-btn").style.display = "inline-block"; // Mostra o de restaurar
+    calcularTotais();
+    salvarDados();
+  }
+
+  function restaurarRow(button) {
+    const row = button.closest("tr");
+    row.removeAttribute("data-arquivado");
+    row.style.display = ""; // Torna a linha visível
+    row.querySelector(".archive-btn").style.display = "inline-block"; // Mostra o botão de arquivar
+    button.style.display = "none"; // Oculta o botão de restaurar
+    calcularTotais();
+    salvarDados();
+  }
+
+  // MODIFICADA: toggleArquivadas
+  function toggleArquivadas() {
+    const btn = document.getElementById("toggle-arquivadas");
+    const mostrar = btn.textContent.includes("Mostrar");
+    document.querySelectorAll("#despesas-body tr[data-arquivado='true']").forEach(row => {
+      row.style.display = mostrar ? "" : "none"; // "" torna visível (remove display:none), "none" oculta
+    });
+    btn.textContent = mostrar ? "Ocultar Arquivadas" : "Mostrar Arquivadas";
+    calcularTotais(); // Adicionado para recalcular e redesenhar
+  }
+
+  function updateStatus(select) {
+    const td = select.parentElement;
+    td.classList.remove("paid", "unpaid");
+    if (select.value === "pago") td.classList.add("paid");
+    if (select.value === "nao-pago") td.classList.add("unpaid");
+  }
+
+  // MODIFICADA: calcularTotais
+  function calcularTotais() {
+    const totaisMes = Array(12).fill(0); // Para os totais mensais no rodapé
+    const labelsGrafico = [];             // Para as legendas do gráfico
+    const valoresGrafico = [];          // Para os valores do gráfico
+
+    const rows = document.querySelectorAll("#despesas-body tr");
+
+    rows.forEach((tr) => {
+      let totalLinhaParaGraficoEItem = 0; // Total para esta linha específica, se estiver visível
+      const descricao = tr.querySelector("td[contenteditable]").innerText;
+
+      // Itera pelas células de cada mês na linha atual
+      tr.querySelectorAll("td").forEach((td, cellIndex) => {
+        // As células de mês vão do índice 1 (Jan) ao 12 (Dez)
+        if (cellIndex >= 1 && cellIndex <= 12) {
           const input = td.querySelector("input");
           const select = td.querySelector("select");
+          const valor = parseFloat(input?.value) || 0;
+          const status = select?.value;
 
-          if (input && select && select.value === "pago") {
-            const valor = parseFloat(input.value) || 0;
-            totaisMes[i - 1] += valor;
-            totalLinha += valor;
-          }
-        }
+          if (status === "pago") {
+            // Sempre adiciona aos totais mensais globais, independentemente da visibilidade da linha ou status de arquivamento
+            totaisMes[cellIndex - 1] += valor;
 
-        const totalItemTd = tr.querySelector(".total-item");
-        if (totalItemTd) {
-          totalItemTd.innerText = totalLinha.toFixed(2);
-        }
-
-        if (totalLinha > 0) {
-          labelsGrafico.push(descricao);
-          valoresGrafico.push(totalLinha);
-        }
-      });
-
-      meses.forEach((mes, index) => {
-        const celula = document.getElementById(`total-${mes}`);
-        if (celula) {
-          celula.innerText = totaisMes[index].toFixed(2);
-        }
-      });
-
-      const totalAnual = totaisMes.reduce((soma, val) => soma + val, 0);
-      const celulaTotalAnual = document.getElementById("total-anual");
-      if (celulaTotalAnual) {
-        celulaTotalAnual.innerText = totalAnual.toFixed(2);
-      }
-
-      atualizarGrafico(labelsGrafico, valoresGrafico);
-    }
-
-    function atualizarGrafico(labels, valores) {
-      const ctx = document.getElementById("graficoGastos").getContext("2d");
-
-      if (chart) chart.destroy();
-
-      chart = new Chart(ctx, {
-        type: "pie",
-        data: {
-          labels: labels,
-          datasets: [{
-            data: valores,
-            backgroundColor: [
-              '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
-              '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
-              '#4b5563', '#22c55e', '#eab308', '#0ea5e9'
-            ],
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { position: 'bottom' },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  const valor = context.parsed;
-                  return `${context.label}: R$ ${valor.toFixed(2)}`;
-                }
-              }
+            // Se a linha estiver atualmente visível, adiciona ao seu total individual para gráfico/exibição
+            // Uma linha está oculta se seu estilo 'display' for 'none'
+            if (tr.style.display !== "none") {
+              totalLinhaParaGraficoEItem += valor;
             }
           }
         }
       });
-    }
 
-    function salvarEDepoisCalcular() {
-      salvarDados();
-      calcularTotais();
-    }
-
-    function salvarDados() {
-      const linhas = [];
-      const rows = document.querySelectorAll("#despesas-body tr");
-
-      rows.forEach((tr) => {
-        const descricao = tr.querySelector("td[contenteditable]").innerText.trim();
-        const valores = [];
-
-        const cells = tr.querySelectorAll("td");
-        for (let i = 1; i <= 12; i++) {
-          const input = cells[i]?.querySelector("input");
-          const select = cells[i]?.querySelector("select");
-          valores.push({
-            valor: input?.value || "",
-            status: select?.value || "nao-pago"
-          });
+      // Atualiza a célula "Total Item" e prepara dados para o gráfico SOMENTE se a linha estiver visível
+      if (tr.style.display !== "none") {
+        const totalItemCell = tr.querySelector(".total-item");
+        if (totalItemCell) {
+          totalItemCell.innerText = `R$ ${totalLinhaParaGraficoEItem.toFixed(2)}`;
         }
-
-        linhas.push({ descricao, valores });
-      });
-
-      localStorage.setItem("despesas", JSON.stringify(linhas));
-    }
-
-    function carregarDados() {
-      const dados = JSON.parse(localStorage.getItem("despesas") || "[]");
-      dados.forEach(criarLinha);
-    }
-
-    window.onload = function () {
-      carregarDados();
-      if (document.querySelectorAll("#despesas-body tr").length === 0) {
-        for (let i = 0; i < 5; i++) criarLinha();
+        labelsGrafico.push(descricao);
+        valoresGrafico.push(totalLinhaParaGraficoEItem);
       }
-      calcularTotais();
-    };
-  </script>
+      // Se a linha estiver oculta (display:none), seu "Total Item" não será atualizado aqui,
+      // e ela não será incluída no gráfico. Quando se tornar visível novamente,
+      // calcularTotais() será chamado e irá atualizar corretamente.
+    });
+
+    // Atualiza os totais no rodapé (estes agora incluem corretamente todos os valores 'pago')
+    meses.forEach((mes, i) => {
+      const el = document.getElementById(`total-${mes}`);
+      if (el) el.innerText = `R$ ${totaisMes[i].toFixed(2)}`;
+    });
+
+    const totalAnual = totaisMes.reduce((acc, val) => acc + val, 0);
+    document.getElementById("total-anual").innerText = `R$ ${totalAnual.toFixed(2)}`;
+
+    // Redesenha o gráfico com dados SOMENTE dos itens VISÍVEIS
+    desenharGrafico(labelsGrafico, valoresGrafico);
+  }
+
+  function desenharGrafico(labels, valores) {
+    const ctx = document.getElementById("graficoGastos").getContext("2d");
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: "pie",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Gastos por item (visíveis e pagos)", // Label do dataset atualizado
+          data: valores,
+          backgroundColor: [
+            "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#6366f1", "#ec4899",
+            "#14b8a6", "#8b5cf6", "#f97316", "#22d3ee", "#84cc16", "#f43f5e"
+          ]
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true, // Adicionado para melhor controle com max-width
+        plugins: {
+          legend: {
+            position: 'bottom'
+          }
+        }
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    carregarDados();
+  });
+</script>
 </body>
 </html>
